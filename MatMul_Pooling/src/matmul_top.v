@@ -37,12 +37,14 @@ module matmul_top (
     // parameter [3:0] DONE           = 4'b1010;
     parameter [3:0] IDLE         = 4'b0000;
     parameter [3:0] READ_A       = 4'b0001;
-    parameter [3:0] READ_B       = 4'b0010;
-    parameter [3:0] MAC_COMPUTE  = 4'b0011;
-    parameter [3:0] AVERAGE_POOL = 4'b0100;
-    parameter [3:0] STORE_RESULT = 4'b0101;
-    parameter [3:0] WRITE_BACK   = 4'b0110;
-    parameter [3:0] RESET        = 4'b0111;
+    parameter [3:0] WAIT_DATA_A  = 4'b0010;
+    parameter [3:0] READ_B       = 4'b0011;
+    parameter [3:0] WAIT_DATA_B  = 4'b0100;
+    parameter [3:0] MAC_COMPUTE  = 4'b0101;
+    parameter [3:0] AVERAGE_POOL = 4'b0110;
+    parameter [3:0] STORE_RESULT = 4'b0111;
+    parameter [3:0] WRITE_BACK   = 4'b1000;
+    //parameter [3:0] RESET        = 4'b1001;
 
     // Internal registers
     reg [3:0]  current_state, next_state;
@@ -91,17 +93,17 @@ module matmul_top (
     assign mem_addr_B = base_addr_B + {7'b0, col_cnt};           // B矩阵：0x100-0x103  
     assign mem_addr_C = base_addr_C                              // C矩阵：0x200
     
-    // Result data output - 修改为将池化结果写入C的位置
+    // Result data output - 将池化结果写入C的位置
     // assign mem_data_C = ENABLE_POOLING ? 
     //                    {pooled_buffer[write_back_cnt[1]][1], pooled_buffer[write_back_cnt[1]][0],
     //                     pooled_buffer[write_back_cnt[0]][1], pooled_buffer[write_back_cnt[0]][0]} :
     //                    {result_buffer[write_back_cnt][3], result_buffer[write_back_cnt][2], 
     //                     result_buffer[write_back_cnt][1], result_buffer[write_back_cnt][0]};
 
-    // assign mem_data_C = {pooled_buffer[1][1], pooled_buffer[1][0], 
-    //                  pooled_buffer[0][1], pooled_buffer[0][0]};
-    assign mem_data_C = {pooled_buffer[0][0], pooled_buffer[0][1], 
-                         pooled_buffer[1][0], pooled_buffer[1][1]};
+    assign mem_data_C = {pooled_buffer[1][1], pooled_buffer[1][0], 
+                         pooled_buffer[0][1], pooled_buffer[0][0]};
+    // assign mem_data_C = {pooled_buffer[0][0], pooled_buffer[0][1], 
+    //                      pooled_buffer[1][0], pooled_buffer[1][1]};
     // State machine
     always @(posedge clk or negedge rstn) begin
         if (!rstn) begin
@@ -208,21 +210,20 @@ module matmul_top (
                     readB_done <= 1'b0;
                     fetch_cnt <= 2'b0;
                 end
-                INIT: begin
+                READ_A: begin
                     ready_reg <= 1'b0;
                     row_cnt <= 2'b0;
                     col_cnt <= 2'b0;
                     inner_cnt <= 2'b0;
                     mac_accumulator <= 16'b0;
-                    readA_done <= 1'b0;
+                    // readA_done <= 1'b0;
                     readB_done <= 1'b0;
                     fetch_cnt <= 2'b0;
                     
                     $display("MATMUL: Starting matrix multiplication");
                     $display("MATMUL: Base addresses - A: 0x%h, B: 0x%h, C: 0x%h", 
                              base_addr_A, base_addr_B, base_addr_C);
-                end
-                READ_A: begin
+                
                     // Fetch A matrix row
                     $display("MATMUL: READ_A - Reading A[%d] from 0x%h", 
                              row_cnt, base_addr_A + row_cnt);

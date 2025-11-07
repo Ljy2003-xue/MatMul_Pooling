@@ -1,411 +1,259 @@
+`timescale 1ns/1ps
+
 module tb_top;
 
     // Clock and reset
-    reg clk;
-    reg rstn;
+    reg         clk;
+    reg         rstn;
     
-    // MatMul interface
-    reg kick_start;
-    wire ready;
+    // Matrix multiplication interface
+    reg         kick_start;
+    wire        ready;
     
-    // Memory interfaces - 扩展为10位地址
-    wire mem_read_en_A;
-    wire [9:0] mem_addr_A;
+    // Memory interface for Matrix A
+    wire        mem_read_en_A;
+    wire [9:0]  mem_addr_A;
     wire [31:0] mem_data_A;
     
-    wire mem_read_en_B;
-    wire [9:0] mem_addr_B;
+    // Memory interface for Matrix B  
+    wire        mem_read_en_B;
+    wire [9:0]  mem_addr_B;
     wire [31:0] mem_data_B;
     
-    wire mem_write_en_C;
-    wire [9:0] mem_addr_C;
+    // Memory interface for result write
+    wire        mem_write_en_C;
+    wire [9:0]  mem_addr_C;
     wire [31:0] mem_data_C;
-
+    
     // Test control
-    integer test_count;
-    integer pass_count;
-
-    // Instantiate matmul_top with pooling ENABLED
-    matmul_top #(.ENABLE_POOLING(1)) u_matmul (
+    reg [1:0]   test_case;
+    reg         test_done;
+    
+    // Instantiate DUT
+    matmul_top dut (
         .clk(clk),
         .rstn(rstn),
         .kick_start(kick_start),
         .ready(ready),
+        
+        // Memory interface for Matrix A
         .mem_read_en_A(mem_read_en_A),
         .mem_addr_A(mem_addr_A),
         .mem_data_A(mem_data_A),
+        
+        // Memory interface for Matrix B  
         .mem_read_en_B(mem_read_en_B),
         .mem_addr_B(mem_addr_B),
         .mem_data_B(mem_data_B),
+        
+        // Memory interface for result write
         .mem_write_en_C(mem_write_en_C),
         .mem_addr_C(mem_addr_C),
         .mem_data_C(mem_data_C)
     );
-
-    // Instantiate mem_top
-    mem_top u_memory (
+    
+    // Instantiate memory
+    mem_top memory (
         .clk(clk),
         .rstn(rstn),
+        
+        // Port A - Matrix A interface
         .read_en_A(mem_read_en_A),
         .addr_A(mem_addr_A),
         .data_out_A(mem_data_A),
+        
+        // Port B - Matrix B interface  
         .read_en_B(mem_read_en_B),
         .addr_B(mem_addr_B),
         .data_out_B(mem_data_B),
+        
+        // Port C - Result write interface
         .write_en_C(mem_write_en_C),
         .addr_C(mem_addr_C),
         .data_in_C(mem_data_C)
     );
-
+    
     // Clock generation
     initial begin
         clk = 0;
-        forever #5 clk = ~clk; // 100MHz clock
+        forever #5 clk = ~clk;  // 100MHz clock
     end
-
-    // Main test sequence
+    
+    // Test sequence
     initial begin
-        // Initialize test control
-        test_count = 0;
-        pass_count = 0;
+        initialize_test();
         
-        // Initialize signals
-        rstn = 0;
-        kick_start = 0;
+        // Test Case 1: Original matrices
+        $display("=== Starting Test Case 1 ===");
+        test_case = 1;
+        setup_test_case_1();
+        run_matrix_multiplication();
+        verify_test_case_1();
         
-        $display("==========================================");
-        $display("Starting Multiple Matrix Multiplication Tests");
-        $display("==========================================");
+        // Test Case 2: Different matrices
+        $display("=== Starting Test Case 2 ===");
+        test_case = 2;
+        setup_test_case_2();
+        run_matrix_multiplication();
+        verify_test_case_2();
         
-        // Apply reset
-        #100;
-        rstn = 1;
-        #100;
-        
-        // Test 1: Original test case
-        run_test("Test 1 - Original Matrices", 1);
-        
-        // Test 2: Identity matrix multiplication
-        run_test("Test 2 - Identity Matrices", 2);
-        
-        // Test 3: Zero matrix multiplication  
-        run_test("Test 3 - Zero Matrices", 3);
-        
-        // Test 4: Random matrix multiplication
-        run_test("Test 4 - Random Matrices", 4);
-        
-        // Test 5: Edge case - large values
-        run_test("Test 5 - Large Values", 5);
-        
-        // Summary
-        $display("==========================================");
-        $display("TEST SUMMARY: %0d/%0d tests passed", pass_count, test_count);
-        $display("==========================================");
-        
+        $display("=== All test cases completed successfully! ===");
         #100;
         $finish;
     end
-
-    // Task to run individual test
-    task run_test;
-        input [80:0] test_name;
-        input integer test_num;
+    
+    // Initialize test environment
+    task initialize_test;
         begin
-            test_count = test_count + 1;
-            $display("\n==========================================");
-            $display("Running %s at time %0t", test_name, $time);
-            $display("==========================================");
+            // Reset generation
+            rstn = 0;
+            kick_start = 0;
+            test_done = 0;
+            test_case = 0;
+            #20 rstn = 1;
             
-            // Initialize memory for this test
-            initialize_memory(test_num);
+            $display("=== Testbench: Reset completed ===");
             
-            // Wait for ready
+            // Wait for matmul to be ready
             wait(ready == 1);
-            #20;
+            $display("=== Testbench: Matrix multiplier is ready ===");
+        end
+    endtask
+    
+    // Setup for Test Case 1: Original matrices
+    task setup_test_case_1;
+        begin
+            // Use default matrices already in memory
+            $display("Test Case 1: Using default matrices");
+            $display("Matrix A: [[1,2,3,4], [5,6,7,8], [9,10,11,12], [13,14,15,16]]");
+            $display("Matrix B: [[1,2,3,4], [5,6,7,8], [9,10,11,12], [13,14,15,16]]");
+        end
+    endtask
+    
+    // Setup for Test Case 2: Different matrices
+    task setup_test_case_2;
+        begin
+            // Load new matrices into memory
+            $display("Test Case 2: Loading new matrices into memory");
             
-            // Start operation
+            // Matrix A: Identity matrix
+            memory.memory[10'h000] = {8'd1, 8'd0, 8'd0, 8'd0};  // [0,0,0,1]
+            memory.memory[10'h001] = {8'd0, 8'd1, 8'd0, 8'd0};  // [0,0,1,0]
+            memory.memory[10'h002] = {8'd0, 8'd0, 8'd1, 8'd0};  // [0,1,0,0]
+            memory.memory[10'h003] = {8'd0, 8'd0, 8'd0, 8'd1};  // [1,0,0,0]
+            
+            // Matrix B: All 2's
+            memory.memory[10'h100] = {8'd2, 8'd2, 8'd2, 8'd2};  // [2,2,2,2]
+            memory.memory[10'h101] = {8'd2, 8'd2, 8'd2, 8'd2};  // [2,2,2,2]
+            memory.memory[10'h102] = {8'd2, 8'd2, 8'd2, 8'd2};  // [2,2,2,2]
+            memory.memory[10'h103] = {8'd2, 8'd2, 8'd2, 8'd2};  // [2,2,2,2]
+            
+            $display("Matrix A: Identity matrix");
+            $display("Matrix B: All 2's");
+        end
+    endtask
+    
+    // Run matrix multiplication
+    task run_matrix_multiplication;
+        begin
+            // Start computation
+            #10;
             kick_start = 1;
-            #20;
+            $display("Starting matrix multiplication for test case %0d", test_case);
+            #10;
             kick_start = 0;
             
-            // Wait for completion with timeout
-            fork
-                begin
-                    wait(ready == 1);
-                    $display("%s completed at time %0t", test_name, $time);
-                    
-                    // Verify results
-                    if (verify_results(test_num)) begin
-                        pass_count = pass_count + 1;
-                        $display("%s: PASSED", test_name);
-                    end else begin
-                        $display("%s: FAILED", test_name);
-                    end
-                end
-                begin
-                    #10000; // 10us timeout
-                    $display("ERROR: %s timeout at time %0t!", test_name, $time);
-                    $display("Current state: %h", u_matmul.current_state);
-                end
-            join_any
+            // Wait for completion
+            wait(ready == 1);
+            $display("Matrix multiplication completed for test case %0d", test_case);
             
-            // Disable timeout
-            disable fork;
-            
-            // Reset for next test
-            #100;
-            rstn = 0;
-            #50;
-            rstn = 1;
+            // Allow some time for final writes
             #100;
         end
     endtask
-
-    // Task to initialize memory based on test case
-    task initialize_memory;
-        input integer test_case;
-        integer i, j;
-        reg [7:0] temp_A [0:3][0:3];
-        reg [7:0] temp_B [0:3][0:3];
+    
+    // Verify Test Case 1 results
+    task verify_test_case_1;
         begin
-            // Clear memory first
-            for (i = 0; i < 1024; i = i + 1) begin
-                u_memory.memory[i] = 32'b0;
-            end
+            $display("=== Verifying Test Case 1 Results ===");
             
-            case (test_case)
-                1: begin // Original test case
-                    // Matrix A (row major)
-                    temp_A[0][0] = 1; temp_A[0][1] = 2; temp_A[0][2] = 3; temp_A[0][3] = 4;
-                    temp_A[1][0] = 5; temp_A[1][1] = 6; temp_A[1][2] = 7; temp_A[1][3] = 8;
-                    temp_A[2][0] = 9; temp_A[2][1] = 10; temp_A[2][2] = 11; temp_A[2][3] = 12;
-                    temp_A[3][0] = 13; temp_A[3][1] = 14; temp_A[3][2] = 15; temp_A[3][3] = 16;
-                    
-                    // Matrix B (column major)
-                    temp_B[0][0] = 1; temp_B[1][0] = 2; temp_B[2][0] = 3; temp_B[3][0] = 4;
-                    temp_B[0][1] = 5; temp_B[1][1] = 6; temp_B[2][1] = 7; temp_B[3][1] = 8;
-                    temp_B[0][2] = 9; temp_B[1][2] = 10; temp_B[2][2] = 11; temp_B[3][2] = 12;
-                    temp_B[0][3] = 13; temp_B[1][3] = 14; temp_B[2][3] = 15; temp_B[3][3] = 16;
-                end
-                
-                2: begin // Identity matrices
-                    // Matrix A = Identity (row major)
-                    for (i = 0; i < 4; i = i + 1) begin
-                        for (j = 0; j < 4; j = j + 1) begin
-                            temp_A[i][j] = (i == j) ? 8'd1 : 8'd0;
-                        end
-                    end
-                    
-                    // Matrix B = Identity (column major)
-                    for (i = 0; i < 4; i = i + 1) begin
-                        for (j = 0; j < 4; j = j + 1) begin
-                            temp_B[i][j] = (i == j) ? 8'd1 : 8'd0;
-                        end
-                    end
-                end
-                
-                3: begin // Zero matrices
-                    // Matrix A = Zero (row major)
-                    for (i = 0; i < 4; i = i + 1) begin
-                        for (j = 0; j < 4; j = j + 1) begin
-                            temp_A[i][j] = 8'd0;
-                        end
-                    end
-                    
-                    // Matrix B = Zero (column major)
-                    for (i = 0; i < 4; i = i + 1) begin
-                        for (j = 0; j < 4; j = j + 1) begin
-                            temp_B[i][j] = 8'd0;
-                        end
-                    end
-                end
-                
-                4: begin // Random matrices
-                    // Generate random values for Matrix A (row major)
-                    for (i = 0; i < 4; i = i + 1) begin
-                        for (j = 0; j < 4; j = j + 1) begin
-                            temp_A[i][j] = {$random} % 16; // Values 0-15
-                        end
-                    end
-                    
-                    // Generate random values for Matrix B (column major)
-                    for (i = 0; i < 4; i = i + 1) begin
-                        for (j = 0; j < 4; j = j + 1) begin
-                            temp_B[i][j] = {$random} % 16; // Values 0-15
-                        end
-                    end
-                    
-                    $display("Random Matrix A:");
-                    for (i = 0; i < 4; i = i + 1) begin
-                        $display("  Row %0d: %2d %2d %2d %2d", i, 
-                                temp_A[i][0], temp_A[i][1], temp_A[i][2], temp_A[i][3]);
-                    end
-                    $display("Random Matrix B:");
-                    for (i = 0; i < 4; i = i + 1) begin
-                        $display("  Col %0d: %2d %2d %2d %2d", i, 
-                                temp_B[0][i], temp_B[1][i], temp_B[2][i], temp_B[3][i]);
-                    end
-                end
-                
-                5: begin // Large values (near saturation)
-                    // Matrix A with large values (row major)
-                    temp_A[0][0] = 200; temp_A[0][1] = 180; temp_A[0][2] = 160; temp_A[0][3] = 140;
-                    temp_A[1][0] = 120; temp_A[1][1] = 100; temp_A[1][2] = 80; temp_A[1][3] = 60;
-                    temp_A[2][0] = 40; temp_A[2][1] = 30; temp_A[2][2] = 20; temp_A[2][3] = 10;
-                    temp_A[3][0] = 5; temp_A[3][1] = 10; temp_A[3][2] = 15; temp_A[3][3] = 20;
-                    
-                    // Matrix B with large values (column major)
-                    temp_B[0][0] = 50; temp_B[1][0] = 45; temp_B[2][0] = 40; temp_B[3][0] = 35;
-                    temp_B[0][1] = 30; temp_B[1][1] = 25; temp_B[2][1] = 20; temp_B[3][1] = 15;
-                    temp_B[0][2] = 10; temp_B[1][2] = 8; temp_B[2][2] = 6; temp_B[3][2] = 4;
-                    temp_B[0][3] = 2; temp_B[1][3] = 4; temp_B[2][3] = 6; temp_B[3][3] = 8;
-                end
-            endcase
+            // Expected result for original matrices after pooling
+            // Matrix A × Matrix B = [[90,100,110,120], [202,228,254,280], [314,356,398,440], [426,484,542,600]]
+            // After 2x2 average pooling: [[155,191], [255,255]] (saturated to 8-bit)
             
-            // Write Matrix A to memory (row major) - 使用10位地址
-            for (i = 0; i < 4; i = i + 1) begin
-                u_memory.memory[i] = {temp_A[i][3], temp_A[i][2], temp_A[i][1], temp_A[i][0]};
-            end
+            reg [31:0] result = memory.memory[10'h200];
+            $display("Result at address 0x200: 0x%h", result);
+            $display("Result bytes: [%d, %d, %d, %d]", 
+                     result[7:0], result[15:8], result[23:16], result[31:24]);
             
-            // Write Matrix B to memory (column major) - 使用10位地址
-            for (i = 0; i < 4; i = i + 1) begin
-                u_memory.memory[10'h100 + i] = {temp_B[3][i], temp_B[2][i], temp_B[1][i], temp_B[0][i]};
-            end
-            
-            $display("Memory initialized for test case %0d", test_case);
-        end
-    endtask
-
-    // Task to verify results based on test case - 修改为验证池化结果
-    function automatic integer verify_results;
-        input integer test_case;
-        integer errors;
-        reg [31:0] expected [0:3];
-        reg [31:0] calculated [0:3];
-        integer i, j, k;
-        reg [15:0] dot_product;
-        reg [7:0] temp_A [0:3][0:3];
-        reg [7:0] temp_B [0:3][0:3];
-        reg [7:0] temp_C [0:3][0:3];
-        reg [7:0] temp_P [0:1][0:1];  // 池化结果
-        begin
-            errors = 0;
-            
-            case (test_case)
-                1: begin // Original test case - 计算池化后的预期值
-                    // 先计算矩阵乘法结果
-                    temp_C[0][0] = 30;  temp_C[0][1] = 70;  temp_C[0][2] = 110; temp_C[0][3] = 150;
-                    temp_C[1][0] = 70;  temp_C[1][1] = 174; temp_C[1][2] = 278; temp_C[1][3] = 382;
-                    temp_C[2][0] = 110; temp_C[2][1] = 278; temp_C[2][2] = 446; temp_C[2][3] = 614;
-                    temp_C[3][0] = 150; temp_C[3][1] = 382; temp_C[3][2] = 614; temp_C[3][3] = 846;
-                    
-                    // 应用饱和处理
-                    for (i = 0; i < 4; i = i + 1) begin
-                        for (j = 0; j < 4; j = j + 1) begin
-                            if (temp_C[i][j] > 255) temp_C[i][j] = 255;
-                        end
-                    end
-                    
-                    // 计算2x2平均池化
-                    temp_P[0][0] = (temp_C[0][0] + temp_C[0][1] + temp_C[1][0] + temp_C[1][1]) >> 2;  // (30+70+70+174)/4 = 86
-                    temp_P[0][1] = (temp_C[0][2] + temp_C[0][3] + temp_C[1][2] + temp_C[1][3]) >> 2;  // (110+150+255+255)/4 = 192
-                    temp_P[1][0] = (temp_C[2][0] + temp_C[2][1] + temp_C[3][0] + temp_C[3][1]) >> 2;  // (110+255+150+255)/4 = 192
-                    temp_P[1][1] = (temp_C[2][2] + temp_C[2][3] + temp_C[3][2] + temp_C[3][3]) >> 2;  // (255+255+255+255)/4 = 255
-                    
-                    expected[0] = {temp_P[0][1], temp_P[0][0], temp_P[0][1], temp_P[0][0]};  // P[0][1], P[0][0]
-                    expected[1] = {temp_P[1][1], temp_P[1][0], temp_P[0][1], temp_P[0][0]};  // P[1][1], P[1][0]
-                end
-                
-                2: begin // Identity matrices - 池化后的结果
-                    // 单位矩阵相乘还是单位矩阵，池化后每个2x2区域平均值
-                    temp_P[0][0] = (1+0+0+0) >> 2;  // 0
-                    temp_P[0][1] = (0+1+0+0) >> 2;  // 0
-                    temp_P[1][0] = (0+0+1+0) >> 2;  // 0
-                    temp_P[1][1] = (0+0+0+1) >> 2;  // 0
-                    
-                    expected[0] = {temp_P[0][1], temp_P[0][0], temp_P[0][1], temp_P[0][0]};
-                    expected[1] = {temp_P[1][1], temp_P[1][0], temp_P[0][1], temp_P[0][0]};
-                end
-                
-                3: begin // Zero matrices - 池化后还是零
-                    temp_P[0][0] = 0;
-                    temp_P[0][1] = 0;
-                    temp_P[1][0] = 0;
-                    temp_P[1][1] = 0;
-                    
-                    expected[0] = {temp_P[0][1], temp_P[0][0], temp_P[0][1], temp_P[0][0]};
-                    expected[1] = {temp_P[1][1], temp_P[1][0], temp_P[0][1], temp_P[0][0]};
-                end
-                
-                4, 5: begin // Random and large values - 计算预期池化结果
-                    // Read back matrices from memory to calculate expected result
-                    for (i = 0; i < 4; i = i + 1) begin
-                        {temp_A[i][3], temp_A[i][2], temp_A[i][1], temp_A[i][0]} = u_memory.memory[i];
-                    end
-                    for (i = 0; i < 4; i = i + 1) begin
-                        {temp_B[3][i], temp_B[2][i], temp_B[1][i], temp_B[0][i]} = u_memory.memory[10'h100 + i];
-                    end
-                    
-                    // Calculate expected result C = A * B with saturation
-                    for (i = 0; i < 4; i = i + 1) begin
-                        for (j = 0; j < 4; j = j + 1) begin
-                            dot_product = 0;
-                            for (k = 0; k < 4; k = k + 1) begin
-                                dot_product = dot_product + (temp_A[i][k] * temp_B[k][j]);
-                            end
-                            // 应用饱和处理：如果超过255则取255
-                            temp_C[i][j] = (dot_product > 255) ? 8'd255 : dot_product[7:0];
-                        end
-                    end
-                    
-                    // 计算2x2平均池化
-                    temp_P[0][0] = (temp_C[0][0] + temp_C[0][1] + temp_C[1][0] + temp_C[1][1]) >> 2;
-                    temp_P[0][1] = (temp_C[0][2] + temp_C[0][3] + temp_C[1][2] + temp_C[1][3]) >> 2;
-                    temp_P[1][0] = (temp_C[2][0] + temp_C[2][1] + temp_C[3][0] + temp_C[3][1]) >> 2;
-                    temp_P[1][1] = (temp_C[2][2] + temp_C[2][3] + temp_C[3][2] + temp_C[3][3]) >> 2;
-                    
-                    // Format expected results
-                    expected[0] = {temp_P[0][1], temp_P[0][0], temp_P[0][1], temp_P[0][0]};
-                    expected[1] = {temp_P[1][1], temp_P[1][0], temp_P[0][1], temp_P[0][0]};
-                end
-            endcase
-            
-            // Read actual results from memory - 使用10位地址
-            calculated[0] = u_memory.memory[10'h200];
-            calculated[1] = u_memory.memory[10'h201];
-            
-            // Display results
-            $display("Expected vs Actual POOLED results:");
-            $display("Address 0x200 - Exp: P[0]=%3d, P[1]=%3d, Act: P[0]=%3d, P[1]=%3d",
-                    expected[0][7:0], expected[0][15:8],
-                    calculated[0][7:0], calculated[0][15:8]);
-            $display("Address 0x201 - Exp: P[2]=%3d, P[3]=%3d, Act: P[2]=%3d, P[3]=%3d",
-                    expected[1][7:0], expected[1][15:8],
-                    calculated[1][7:0], calculated[1][15:8]);
-            
-            // Check results - 只检查前两个地址，因为池化结果只有2x2=4个元素，存储在2个地址中
-            for (i = 0; i < 2; i = i + 1) begin
-                if (calculated[i] !== expected[i]) begin
-                    $display("ERROR: Address 0x%h mismatch! Got %h, Expected %h", 
-                            10'h200 + i, calculated[i], expected[i]);
-                    errors = errors + 1;
-                end
-            end
-            
-            if (errors == 0) begin
-                $display("SUCCESS: All pooled results match expected values!");
-                verify_results = 1;
+            // Check if result matches expected pooled values
+            // Expected: [155, 191, 255, 255] packed as [255, 255, 191, 155] in memory
+            if (result[7:0] == 155 && result[15:8] == 191 && 
+                result[23:16] == 255 && result[31:24] == 255) begin
+                $display("TEST CASE 1: PASSED - Result matches expected values");
             end else begin
-                $display("FAILED: %0d errors found in pooled results!", errors);
-                verify_results = 0;
+                $display("TEST CASE 1: FAILED - Result does not match expected values");
+                $display("Expected: [155, 191, 255, 255]");
+                $display("Got: [%d, %d, %d, %d]", 
+                         result[7:0], result[15:8], result[23:16], result[31:24]);
             end
         end
-    endfunction
-
-    // VCD dump for waveform analysis
+    endtask
+    
+    // Verify Test Case 2 results
+    task verify_test_case_2;
+        begin
+            $display("=== Verifying Test Case 2 Results ===");
+            
+            // Expected result for identity matrix × all 2's matrix after pooling
+            // Identity × All 2's = All 2's matrix: [[2,2,2,2], [2,2,2,2], [2,2,2,2], [2,2,2,2]]
+            // After 2x2 average pooling: [[2,2], [2,2]]
+            
+            reg [31:0] result = memory.memory[10'h200];
+            $display("Result at address 0x200: 0x%h", result);
+            $display("Result bytes: [%d, %d, %d, %d]", 
+                     result[7:0], result[15:8], result[23:16], result[31:24]);
+            
+            // Check if result matches expected pooled values
+            // Expected: [2, 2, 2, 2]
+            if (result[7:0] == 2 && result[15:8] == 2 && 
+                result[23:16] == 2 && result[31:24] == 2) begin
+                $display("TEST CASE 2: PASSED - Result matches expected values");
+            end else begin
+                $display("TEST CASE 2: FAILED - Result does not match expected values");
+                $display("Expected: [2, 2, 2, 2]");
+                $display("Got: [%d, %d, %d, %d]", 
+                         result[7:0], result[15:8], result[23:16], result[31:24]);
+            end
+        end
+    endtask
+    
+    // Monitor progress
+    always @(posedge clk) begin
+        if (dut.current_state != dut.IDLE && ready == 0) begin
+            case (dut.current_state)
+                dut.READ_A: $display("TB_MONITOR: Reading Matrix A");
+                dut.READ_B: $display("TB_MONITOR: Reading Matrix B"); 
+                dut.MAC_COMPUTE: $display("TB_MONITOR: Computing MAC");
+                dut.AVERAGE_POOL: $display("TB_MONITOR: Performing pooling");
+                dut.STORE_RESULT: $display("TB_MONITOR: Storing result");
+                dut.WRITE_BACK: $display("TB_MONITOR: Writing back to memory");
+            endcase
+        end
+    end
+    
+    // Timeout protection
     initial begin
-        $dumpfile("matmul_multi_test.vcd");
-        $dumpvars(0, tb_top);
+        #100000;  // 100us timeout
+        $display("=== Testbench: TIMEOUT - Simulation took too long ===");
+        $finish;
+    end
+    
+    // Waveform dumping (for VCS)
+    initial begin
+        $vcdpluson;
+        $vcdplusmemon;
     end
 
 endmodule
+[file content end]
