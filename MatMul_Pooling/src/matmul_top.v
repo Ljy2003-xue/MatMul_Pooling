@@ -19,32 +19,18 @@ module matmul_top (
     output wire [9:0]  mem_addr_C,  
     output wire [31:0] mem_data_C
 );
-
-    // Parameter for optional features
-    //poolinparameter ENABLE_POOLING = 1;  // Set to 1 to enable average pooling
     
     // State definitions - Enhanced FSM
-    // parameter [3:0] IDLE           = 4'b0000;
-    // parameter [3:0] INIT           = 4'b0001;
-    // parameter [3:0] READ_A        = 4'b0010;
-    // parameter [3:0] WAIT_DATA_A    = 4'b0011;
-    // parameter [3:0] READ_B        = 4'b0100;
-    // parameter [3:0] WAIT_DATA_B    = 4'b0101;
-    // parameter [3:0] MAC_COMPUTE    = 4'b0110;
-    // parameter [3:0] STORE_RESULT   = 4'b0111;
-    // parameter [3:0] AVERAGE_POOL   = 4'b1000;
-    // parameter [3:0] WRITE_BACK     = 4'b1001;
-    // parameter [3:0] DONE           = 4'b1010;
     parameter [3:0] IDLE         = 4'b0000;
     parameter [3:0] READ_A       = 4'b0001;
     parameter [3:0] WAIT_DATA_A  = 4'b0010;
     parameter [3:0] READ_B       = 4'b0011;
     parameter [3:0] WAIT_DATA_B  = 4'b0100;
     parameter [3:0] MAC_COMPUTE  = 4'b0101;
-    parameter [3:0] AVERAGE_POOL = 4'b0110;
-    parameter [3:0] STORE_RESULT = 4'b0111;
+    parameter [3:0] STORE_RESULT = 4'b0110;
+    parameter [3:0] AVERAGE_POOL = 4'b0111;
     parameter [3:0] WRITE_BACK   = 4'b1000;
-    //parameter [3:0] RESET        = 4'b1001;
+    
 
     // Internal registers
     reg [3:0]  current_state, next_state;
@@ -64,13 +50,12 @@ module matmul_top (
     // Read completion signals
     reg        readA_done;
     reg        readB_done;
-    reg [1:0]  fetch_cnt;
-    
+        
     // Control signals 
     reg [9:0]  base_addr_A, base_addr_B, base_addr_C;
     
     // Status flags
-    wire       fetch_done;
+    // wire       fetch_done;
     wire       pool_done;
     wire       write_done;
     
@@ -78,7 +63,7 @@ module matmul_top (
     integer i, j;
     
     // Status assignments
-    assign fetch_done = (fetch_cnt == 2'b11);
+    // assign fetch_done = (fetch_cnt == 2'b11);
     assign pool_done = (pool_row_cnt == 2'b11 && pool_col_cnt == 2'b11);
     assign write_done = (write_back_cnt == 1'b1);
     
@@ -91,19 +76,13 @@ module matmul_top (
     // Address generation - 使用10位地址
     assign mem_addr_A = base_addr_A + {7'b0, row_cnt};           // A矩阵：0x00-0x03
     assign mem_addr_B = base_addr_B + {7'b0, col_cnt};           // B矩阵：0x100-0x103  
-    assign mem_addr_C = base_addr_C                              // C矩阵：0x200
+    assign mem_addr_C = base_addr_C;                             // C矩阵：0x200
     
     // Result data output - 将池化结果写入C的位置
-    // assign mem_data_C = ENABLE_POOLING ? 
-    //                    {pooled_buffer[write_back_cnt[1]][1], pooled_buffer[write_back_cnt[1]][0],
-    //                     pooled_buffer[write_back_cnt[0]][1], pooled_buffer[write_back_cnt[0]][0]} :
-    //                    {result_buffer[write_back_cnt][3], result_buffer[write_back_cnt][2], 
-    //                     result_buffer[write_back_cnt][1], result_buffer[write_back_cnt][0]};
 
     assign mem_data_C = {pooled_buffer[1][1], pooled_buffer[1][0], 
                          pooled_buffer[0][1], pooled_buffer[0][0]};
-    // assign mem_data_C = {pooled_buffer[0][0], pooled_buffer[0][1], 
-    //                      pooled_buffer[1][0], pooled_buffer[1][1]};
+    
     // State machine
     always @(posedge clk or negedge rstn) begin
         if (!rstn) begin
@@ -119,9 +98,6 @@ module matmul_top (
             IDLE: begin
                 next_state = (kick_start && ready) ? READ_A : IDLE;
             end
-            // INIT: begin
-            //     next_state = READ_A;
-            // end
             READ_A: begin
                 next_state = WAIT_DATA_A;
             end
@@ -198,7 +174,7 @@ module matmul_top (
             end
             
             $display("MATMUL: Reset completed");
-            $display("MATMUL: Pooling %s", ENABLE_POOLING ? "ENABLED" : "DISABLED");
+            $display("MATMUL: Pooling ENABLED");
         end else begin
             case (current_state)
                 IDLE: begin
@@ -208,17 +184,18 @@ module matmul_top (
                     //pool_active <= 1'b0;
                     readA_done <= 1'b0;
                     readB_done <= 1'b0;
-                    fetch_cnt <= 2'b0;
+                    
+                    row_cnt <= 2'b0;
+                    col_cnt <= 2'b0;
                 end
                 READ_A: begin
                     ready_reg <= 1'b0;
-                    row_cnt <= 2'b0;
-                    col_cnt <= 2'b0;
+                    
                     inner_cnt <= 2'b0;
                     mac_accumulator <= 16'b0;
                     // readA_done <= 1'b0;
                     readB_done <= 1'b0;
-                    fetch_cnt <= 2'b0;
+                    
                     
                     $display("MATMUL: Starting matrix multiplication");
                     $display("MATMUL: Base addresses - A: 0x%h, B: 0x%h, C: 0x%h", 
@@ -235,7 +212,7 @@ module matmul_top (
                     a_row_buffer[1] <= mem_data_A[15:8];
                     a_row_buffer[2] <= mem_data_A[23:16];
                     a_row_buffer[3] <= mem_data_A[31:24];
-                    
+                                        
                     $display("MATMUL: WAIT_DATA_A - A[%d] = [%d, %d, %d, %d]", 
                              row_cnt, a_row_buffer[0], a_row_buffer[1], 
                              a_row_buffer[2], a_row_buffer[3]);
@@ -305,21 +282,25 @@ module matmul_top (
                         // Perform 2x2 average pooling
                     if (pool_row_cnt < 2 && pool_col_cnt < 2) begin
                         pooled_buffer[pool_row_cnt][pool_col_cnt] <= 
-                            (result_buffer[pool_row_cnt*2][pool_col_cnt*2] +
-                                result_buffer[pool_row_cnt*2][pool_col_cnt*2+1] +
-                                result_buffer[pool_row_cnt*2+1][pool_col_cnt*2] +
-                                result_buffer[pool_row_cnt*2+1][pool_col_cnt*2+1]) >> 2;
+                            (result_buffer[pool_row_cnt*2][pool_col_cnt*2] >> 2) +
+                            (result_buffer[pool_row_cnt*2][pool_col_cnt*2+1] >> 2)+
+                            (result_buffer[pool_row_cnt*2+1][pool_col_cnt*2] >> 2) +
+                            (result_buffer[pool_row_cnt*2+1][pool_col_cnt*2+1]>> 2);
                         
-                        $display("MATMUL: POOL - P[%d][%d] = (%d+%d+%d+%d)/4 = %d",
+                        $display("MATMUL: POOL - P[%d][%d] = (%d+%d+%d+%d)/4 = %d+%d+%d+%d=%d",
                                     pool_row_cnt, pool_col_cnt,
                                     result_buffer[pool_row_cnt*2][pool_col_cnt*2],
                                     result_buffer[pool_row_cnt*2][pool_col_cnt*2+1],
                                     result_buffer[pool_row_cnt*2+1][pool_col_cnt*2],
                                     result_buffer[pool_row_cnt*2+1][pool_col_cnt*2+1],
-                                    (result_buffer[pool_row_cnt*2][pool_col_cnt*2] +
-                                    result_buffer[pool_row_cnt*2][pool_col_cnt*2+1] +
-                                    result_buffer[pool_row_cnt*2+1][pool_col_cnt*2] +
-                                    result_buffer[pool_row_cnt*2+1][pool_col_cnt*2+1]) >> 2);
+                                    (result_buffer[pool_row_cnt*2][pool_col_cnt*2] >> 2),
+                                    (result_buffer[pool_row_cnt*2][pool_col_cnt*2+1] >> 2),
+                                    (result_buffer[pool_row_cnt*2+1][pool_col_cnt*2] >> 2),
+                                    (result_buffer[pool_row_cnt*2+1][pool_col_cnt*2+1]>> 2),
+                                    (result_buffer[pool_row_cnt*2][pool_col_cnt*2] >> 2) +
+                                    (result_buffer[pool_row_cnt*2][pool_col_cnt*2+1] >> 2)+
+                                    (result_buffer[pool_row_cnt*2+1][pool_col_cnt*2] >> 2) +
+                                    (result_buffer[pool_row_cnt*2+1][pool_col_cnt*2+1])>> 2);
                         
                         if (pool_col_cnt == 2'b01) begin
                             pool_col_cnt <= 2'b0;
