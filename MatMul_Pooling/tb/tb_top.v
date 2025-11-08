@@ -11,17 +11,17 @@ module tb_matmul_top;
     wire        ready;
     
     // Memory interface for Matrix A
-    wire        mem_read_en_A;
+    wire        mem_en_read_A;
     wire [9:0]  mem_addr_A;
     wire [31:0] mem_data_A;
     
     // Memory interface for Matrix B  
-    wire        mem_read_en_B;
+    wire        mem_en_read_B;
     wire [9:0]  mem_addr_B;
     wire [31:0] mem_data_B;
     
     // Memory interface for result write
-    wire        mem_write_en_C;
+    wire        mem_en_write_C;
     wire [9:0]  mem_addr_C;
     wire [31:0] mem_data_C;
     
@@ -41,17 +41,17 @@ module tb_matmul_top;
         .ready          (ready),
         
         // Memory interface for Matrix A
-        .mem_read_en_A  (mem_read_en_A),
+        .mem_en_read_A  (mem_en_read_A),
         .mem_addr_A     (mem_addr_A),
         .mem_data_A     (mem_data_A),
         
         // Memory interface for Matrix B  
-        .mem_read_en_B  (mem_read_en_B),
+        .mem_en_read_B  (mem_en_read_B),
         .mem_addr_B     (mem_addr_B),
         .mem_data_B     (mem_data_B),
         
         // Memory interface for result write
-        .mem_write_en_C (mem_write_en_C),
+        .mem_en_write_C (mem_en_write_C),
         .mem_addr_C     (mem_addr_C),
         .mem_data_C     (mem_data_C)
     );
@@ -62,17 +62,17 @@ module tb_matmul_top;
         .rstn       (rstn),
         
         // Port A - Matrix A interface
-        .read_en_A  (mem_read_en_A),
+        .read_en_A  (mem_en_read_A),
         .addr_A     (mem_addr_A),
         .data_out_A (mem_data_A),
         
         // Port B - Matrix B interface  
-        .read_en_B  (mem_read_en_B),
+        .read_en_B  (mem_en_read_B),
         .addr_B     (mem_addr_B),
         .data_out_B (mem_data_B),
         
         // Port C - Result write interface
-        .write_en_C (mem_write_en_C),
+        .write_en_C (mem_en_write_C),
         .addr_C     (mem_addr_C),
         .data_in_C  (mem_data_C)
     );
@@ -327,7 +327,7 @@ module tb_matmul_top;
             end
             
             // Monitor important write events
-            if (mem_write_en_C) begin
+            if (mem_en_write_C) begin
                 $display("TB_MONITOR: Write to addr 0x%h, data 0x%h", mem_addr_C, mem_data_C);
             end
         end

@@ -5,17 +5,17 @@ module matmul_top (
     output wire        ready,
     
     // Memory interface for Matrix A
-    output wire        mem_read_en_A,
+    output wire        mem_en_read_A,
     output wire [9:0]  mem_addr_A,  
     input  wire [31:0] mem_data_A,
     
     // Memory interface for Matrix B  
-    output wire        mem_read_en_B,
+    output wire        mem_en_read_B,
     output wire [9:0]  mem_addr_B,  
     input  wire [31:0] mem_data_B,
     
     // Memory interface for result write
-    output wire        mem_write_en_C,
+    output wire        mem_en_write_C,
     output wire [9:0]  mem_addr_C,  
     output wire [31:0] mem_data_C
 );
@@ -26,15 +26,18 @@ module matmul_top (
     parameter [3:0] WAIT_DATA_A  = 4'b0010;
     parameter [3:0] READ_B       = 4'b0011;
     parameter [3:0] WAIT_DATA_B  = 4'b0100;
-    parameter [3:0] MAC_COMPUTE  = 4'b0101;
+    parameter [3:0] MAT_COMPUTE  = 4'b0101;
     parameter [3:0] STORE_RESULT = 4'b0110;
     parameter [3:0] AVERAGE_POOL = 4'b0111;
     parameter [3:0] WRITE_BACK   = 4'b1000;
     
 
     // Internal registers
-    reg [3:0]  current_state, next_state;
-    reg [1:0]  row_cnt, col_cnt, inner_cnt;
+    reg [3:0]  current_state, 
+               next_state;
+    reg [1:0]  row_cnt, 
+               col_cnt, 
+               inner_cnt;
     reg [7:0]  result_buffer [0:3][0:3];
     reg [7:0]  pooled_buffer [0:1][0:1];
     reg [7:0]  a_row_buffer [0:3];
@@ -42,10 +45,8 @@ module matmul_top (
     reg [15:0] mac_accumulator;
     reg        ready_reg;
     reg        write_back_active;
-   //. reg [1:0]  write_back_cnt;
     reg        write_back_cnt;
-    //reg        pool_active;
-    reg [1:0]  pool_row_cnt, pool_col_cnt;
+    reg        pool_row_cnt, pool_col_cnt;
     
     // Read completion signals
     reg        readA_done;
@@ -63,14 +64,14 @@ module matmul_top (
     integer i, j;
     
     // Status assignments
-    // assign fetch_done = (fetch_cnt == 2'b11);
-    assign pool_done = (pool_row_cnt == 2'b11 && pool_col_cnt == 2'b11);
+
+    assign pool_done = (pool_row_cnt && pool_col_cnt);
     assign write_done = (write_back_cnt == 1'b1);
     
     // Output assignments
     assign ready = ready_reg;
-    assign mem_read_en_A = (current_state == READ_A);
-    assign mem_read_en_B = (current_state == READ_B);
+    assign mem_en_read_A = (current_state == READ_A);
+    assign mem_en_read_B = (current_state == READ_B);
     assign mem_write_en_C = write_back_active;
     
     // Address generation - 使用10位地址
@@ -108,16 +109,16 @@ module matmul_top (
                 next_state = WAIT_DATA_B;
             end
             WAIT_DATA_B: begin
-                next_state = readB_done ? MAC_COMPUTE : WAIT_DATA_B;
+                next_state = readB_done ? MAT_COMPUTE : WAIT_DATA_B;
             end
-            MAC_COMPUTE: begin
-                next_state = (inner_cnt == 2'b11) ? STORE_RESULT : MAC_COMPUTE;
+            MAT_COMPUTE: begin
+                next_state = (inner_cnt == 2'b11) ? STORE_RESULT : MAT_COMPUTE;
             end
             STORE_RESULT: begin
                 if (row_cnt == 2'b11 && col_cnt == 2'b11) begin
                     next_state =  AVERAGE_POOL;
                 end else begin
-                    next_state = READ_A;
+                    next_state = READ_A;//下一步优化
                 end
             end
             AVERAGE_POOL: begin
@@ -147,12 +148,10 @@ module matmul_top (
             mac_accumulator <= 16'b0;
             write_back_active <= 1'b0;
             write_back_cnt <= 2'b0;
-            //pool_active <= 1'b0;
             pool_row_cnt <= 2'b0;
             pool_col_cnt <= 2'b0;
             readA_done <= 1'b0;
             readB_done <= 1'b0;
-            fetch_cnt <= 2'b0;
             
             // Initialize result buffers
             for (i = 0; i < 4; i = i + 1) begin
@@ -174,29 +173,45 @@ module matmul_top (
             end
             
             $display("MATMUL: Reset completed");
-            $display("MATMUL: Pooling ENABLED");
+
         end else begin
             case (current_state)
                 IDLE: begin
                     ready_reg <= 1'b1;
                     write_back_active <= 1'b0;
                     write_back_cnt <= 2'b0;
-                    //pool_active <= 1'b0;
                     readA_done <= 1'b0;
                     readB_done <= 1'b0;
                     
                     row_cnt <= 2'b0;
                     col_cnt <= 2'b0;
+                    
+                    // Initialize result buffers
+                    for (i = 0; i < 4; i = i + 1) begin
+                        for (j = 0; j < 4; j = j + 1) begin
+                            result_buffer[i][j] <= 8'b0;
+                        end
+                    end
+                    
+                    for (i = 0; i < 2; i = i + 1) begin
+                        for (j = 0; j < 2; j = j + 1) begin
+                            pooled_buffer[i][j] <= 8'b0;
+                        end
+                    end
+                    
+                    // Initialize row/column buffers
+                    for (i = 0; i < 4; i = i + 1) begin
+                        a_row_buffer[i] <= 8'b0;
+                        b_col_buffer[i] <= 8'b0;
+                    end
                 end
+
                 READ_A: begin
                     ready_reg <= 1'b0;
                     
                     inner_cnt <= 2'b0;
                     mac_accumulator <= 16'b0;
-                    // readA_done <= 1'b0;
-                    readB_done <= 1'b0;
-                    
-                    
+               
                     $display("MATMUL: Starting matrix multiplication");
                     $display("MATMUL: Base addresses - A: 0x%h, B: 0x%h, C: 0x%h", 
                              base_addr_A, base_addr_B, base_addr_C);
@@ -206,6 +221,7 @@ module matmul_top (
                              row_cnt, base_addr_A + row_cnt);
                     readA_done <= 1'b0;
                 end
+
                 WAIT_DATA_A: begin
                     // Capture A matrix data (row major)
                     a_row_buffer[0] <= mem_data_A[7:0];
@@ -219,12 +235,14 @@ module matmul_top (
                     
                     readA_done <= 1'b1;
                 end
+
                 READ_B: begin
                     // Fetch B matrix column
                     $display("MATMUL: READ_B - Reading B[%d] from 0x%h", 
                              col_cnt, base_addr_B + col_cnt);
                     readB_done <= 1'b0;
                 end
+
                 WAIT_DATA_B: begin
                     // Capture B matrix data (column major)
                     b_col_buffer[0] <= mem_data_B[7:0];
@@ -241,7 +259,8 @@ module matmul_top (
                     inner_cnt <= 2'b0;
                     readB_done <= 1'b1;
                 end
-                MAC_COMPUTE: begin
+
+                MAT_COMPUTE: begin
                     // Multiply-accumulate computation
                     mac_accumulator <= mac_accumulator + (a_row_buffer[inner_cnt] * b_col_buffer[inner_cnt]);
                     inner_cnt <= inner_cnt + 1;
@@ -251,13 +270,17 @@ module matmul_top (
                              a_row_buffer[inner_cnt] * b_col_buffer[inner_cnt],
                              mac_accumulator + (a_row_buffer[inner_cnt] * b_col_buffer[inner_cnt]));
                 end
+
                 STORE_RESULT: begin
                     // Store dot product result (saturate to 8-bit)
-                    result_buffer[row_cnt][col_cnt] <= (mac_accumulator > 255) ? 8'hFF : mac_accumulator[7:0];
-                    
-                    $display("MATMUL: STORE - C[%d][%d] = %d (raw: %d)", 
+                    //result_buffer[row_cnt][col_cnt] <= (mac_accumulator > 255) ? 8'hFF : mac_accumulator[7:0];
+                    //$display("MATMUL: STORE - C[%d][%d] = %d (raw: %d)", 
+                    //          row_cnt, col_cnt, 
+                    //          (mac_accumulator > 255) ? 8'hFF : mac_accumulator[7:0], 
+                    //          mac_accumulator);
+                    result_buffer[row_cnt][col_cnt] <= mac_accumulator[7:0];
+                    $display("MATMUL: STORE - C[%d][%d] = %d (raw)", 
                              row_cnt, col_cnt, 
-                             (mac_accumulator > 255) ? 8'hFF : mac_accumulator[7:0], 
                              mac_accumulator);
                     
                     // Update counters
@@ -272,44 +295,45 @@ module matmul_top (
                     readA_done <= 1'b0;
                     readB_done <= 1'b0;
                 end
+
                 AVERAGE_POOL: begin
-                    // if (!pool_active) begin
-                    //     pool_active <= 1'b1;
-                    //     pool_row_cnt <= 2'b0;
-                    //     pool_col_cnt <= 2'b0;
-                    //     $display("MATMUL: Starting average pooling");
-                    // end else begin
-                        // Perform 2x2 average pooling
                     if (pool_row_cnt < 2 && pool_col_cnt < 2) begin
                         pooled_buffer[pool_row_cnt][pool_col_cnt] <= 
-                            (result_buffer[pool_row_cnt*2][pool_col_cnt*2] >> 2) +
-                            (result_buffer[pool_row_cnt*2][pool_col_cnt*2+1] >> 2)+
-                            (result_buffer[pool_row_cnt*2+1][pool_col_cnt*2] >> 2) +
+                            (result_buffer[pool_row_cnt*2][pool_col_cnt*2]    >> 2)+
+                            (result_buffer[pool_row_cnt*2][pool_col_cnt*2+1]  >> 2)+
+                            (result_buffer[pool_row_cnt*2+1][pool_col_cnt*2]  >> 2)+
                             (result_buffer[pool_row_cnt*2+1][pool_col_cnt*2+1]>> 2);
                         
-                        $display("MATMUL: POOL - P[%d][%d] = (%d+%d+%d+%d)/4 = %d+%d+%d+%d=%d",
+                        $display("MATMUL: POOL - P[%d][%d] = (%d+%d+%d+%d)/4 = %d+%d+%d+%d = %d",
                                     pool_row_cnt, pool_col_cnt,
                                     result_buffer[pool_row_cnt*2][pool_col_cnt*2],
                                     result_buffer[pool_row_cnt*2][pool_col_cnt*2+1],
                                     result_buffer[pool_row_cnt*2+1][pool_col_cnt*2],
                                     result_buffer[pool_row_cnt*2+1][pool_col_cnt*2+1],
-                                    (result_buffer[pool_row_cnt*2][pool_col_cnt*2] >> 2),
-                                    (result_buffer[pool_row_cnt*2][pool_col_cnt*2+1] >> 2),
-                                    (result_buffer[pool_row_cnt*2+1][pool_col_cnt*2] >> 2),
+                                    // (result_buffer[pool_row_cnt*2][pool_col_cnt*2]    >> 2),
+                                    // (result_buffer[pool_row_cnt*2][pool_col_cnt*2+1]  >> 2),
+                                    // (result_buffer[pool_row_cnt*2+1][pool_col_cnt*2]  >> 2),
+                                    // (result_buffer[pool_row_cnt*2+1][pool_col_cnt*2+1]>> 2),
+                                    // (result_buffer[pool_row_cnt*2][pool_col_cnt*2]    >> 2) +
+                                    // (result_buffer[pool_row_cnt*2][pool_col_cnt*2+1]  >> 2)+
+                                    // (result_buffer[pool_row_cnt*2+1][pool_col_cnt*2]  >> 2) +
+                                    // (result_buffer[pool_row_cnt*2+1][pool_col_cnt*2+1]>> 2));
+                                    (result_buffer[pool_row_cnt*2][pool_col_cnt*2]    >> 2),
+                                    (result_buffer[pool_row_cnt*2][pool_col_cnt*2+1]  >> 2),
+                                    (result_buffer[pool_row_cnt*2+1][pool_col_cnt*2]  >> 2),
                                     (result_buffer[pool_row_cnt*2+1][pool_col_cnt*2+1]>> 2),
-                                    (result_buffer[pool_row_cnt*2][pool_col_cnt*2] >> 2) +
-                                    (result_buffer[pool_row_cnt*2][pool_col_cnt*2+1] >> 2)+
-                                    (result_buffer[pool_row_cnt*2+1][pool_col_cnt*2] >> 2) +
-                                    (result_buffer[pool_row_cnt*2+1][pool_col_cnt*2+1])>> 2);
+                                    (result_buffer[pool_row_cnt*2][pool_col_cnt*2]  +
+                                     result_buffer[pool_row_cnt*2][pool_col_cnt*2+1]+
+                                     result_buffer[pool_row_cnt*2+1][pool_col_cnt*2] +
+                                     result_buffer[pool_row_cnt*2+1][pool_col_cnt*2+1])>>2);
                         
-                        if (pool_col_cnt == 2'b01) begin
-                            pool_col_cnt <= 2'b0;
+                        if (pool_col_cnt) begin
+                            pool_col_cnt <= 1'b0;
                             pool_row_cnt <= pool_row_cnt + 1;
                         end else begin
                             pool_col_cnt <= pool_col_cnt + 1;
                         end
                     end
-                    //end
                 end
                 WRITE_BACK: begin
                     if (!write_back_active) begin
@@ -329,7 +353,7 @@ module matmul_top (
                 end else begin
                     write_back_cnt <= write_back_cnt + 1;
                     $display("MATMUL: Writing data %d to address 0x%h", 
-                             write_back_cnt, base_addr_C + write_back_cnt);
+                             mem_data_C, base_addr_C + write_back_cnt);
                 end
             end
         end
