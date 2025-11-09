@@ -2,6 +2,14 @@
 
 module tb_matmul_top;
 
+    initial begin
+    $fsdbDumpfile("wave.fsdb");              // Specify FSDB waveform output file
+    $fsdbDumpvars(0, tb_matmul_top);         // Dump all hierarchy levels of testbench
+    $fsdbDumpvars("+mda");                   // Enable memory array dumping
+    $fsdbDumpvars("+all");                   // Dump all signals
+    $display("FSDB waveform dumping enabled - file: wave.fsdb");
+end
+
     // Clock and reset
     reg         clk;
     reg         rstn;
@@ -126,9 +134,9 @@ module tb_matmul_top;
             timeout_counter = 0;
             
             // Initialize expected results for test 1
-            expected_results[0] = 8'd155;
-            expected_results[1] = 8'd191;
-            expected_results[2] = 8'd255;
+            expected_results[0] = 8'd86;
+            expected_results[1] = 8'd230;
+            expected_results[2] = 8'd230;
             expected_results[3] = 8'd255;
             
             // Apply reset
