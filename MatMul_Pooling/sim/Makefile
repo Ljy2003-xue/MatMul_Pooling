@@ -1,5 +1,3 @@
-# Makefile for ELEG5764 Project 1 - VCS Version
-
 # VCS commands
 VCS = vcs
 VCS_FLAGS = -full64 -sverilog +v2k -debug_access+all +define+FSDB +lint=all,noVCDE +vcs+lic+wait

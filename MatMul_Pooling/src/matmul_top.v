@@ -38,7 +38,7 @@ module matmul_top (
     reg [1:0]  row_cnt, 
                col_cnt, 
                inner_cnt;
-    reg [7:0]  result_buffer [0:3][0:3];
+    reg [15:0]  result_buffer [0:3][0:3];
     reg [7:0]  pooled_buffer [0:1][0:1];
     reg [7:0]  a_row_buffer [0:3];
     reg [7:0]  b_col_buffer [0:3];
@@ -74,12 +74,12 @@ module matmul_top (
     assign mem_en_read_B = (current_state == READ_B);
     assign mem_write_en_C = write_back_active;
     
-    // Address generation - 使用10位地址
-    assign mem_addr_A = base_addr_A + {7'b0, row_cnt};           // A矩阵：0x00-0x03
-    assign mem_addr_B = base_addr_B + {7'b0, col_cnt};           // B矩阵：0x100-0x103  
-    assign mem_addr_C = base_addr_C;                             // C矩阵：0x200
+    // Address generation - use 10 bits to discribe address
+    assign mem_addr_A = base_addr_A + {7'b0, row_cnt};           // Matrix A:0x00-0x03
+    assign mem_addr_B = base_addr_B + {7'b0, col_cnt};           // Matrix B:0x100-0x103  
+    assign mem_addr_C = base_addr_C;                             // Matrix C:0x200
     
-    // Result data output - 将池化结果写入C的位置
+    // Result data output - write back pooling result to base address of C
 
     assign mem_data_C = {pooled_buffer[1][1], pooled_buffer[1][0], 
                          pooled_buffer[0][1], pooled_buffer[0][0]};
@@ -142,9 +142,9 @@ module matmul_top (
             col_cnt <= 2'b0;
             inner_cnt <= 2'b0;
             ready_reg <= 1'b1;
-            base_addr_A <= 10'h000;      // A矩阵基地址：0x000
-            base_addr_B <= 10'h100;      // B矩阵基地址：0x100
-            base_addr_C <= 10'h200;      // C矩阵基地址：0x200
+            base_addr_A <= 10'h000;      
+            base_addr_B <= 10'h100;      
+            base_addr_C <= 10'h200;      
             mac_accumulator <= 16'b0;
             write_back_active <= 1'b0;
             write_back_cnt <= 2'b0;
@@ -156,7 +156,7 @@ module matmul_top (
             // Initialize result buffers
             for (i = 0; i < 4; i = i + 1) begin
                 for (j = 0; j < 4; j = j + 1) begin
-                    result_buffer[i][j] <= 8'b0;
+                    result_buffer[i][j] <= 16'b0;
                 end
             end
             
@@ -189,7 +189,7 @@ module matmul_top (
                     // Initialize result buffers
                     for (i = 0; i < 4; i = i + 1) begin
                         for (j = 0; j < 4; j = j + 1) begin
-                            result_buffer[i][j] <= 8'b0;
+                            result_buffer[i][j] <= 16'b0;
                         end
                     end
                     
@@ -278,7 +278,7 @@ module matmul_top (
                     //          row_cnt, col_cnt, 
                     //          (mac_accumulator > 255) ? 8'hFF : mac_accumulator[7:0], 
                     //          mac_accumulator);
-                    result_buffer[row_cnt][col_cnt] <= mac_accumulator[7:0];
+                    result_buffer[row_cnt][col_cnt] <= mac_accumulator[15:0];
                     $display("MATMUL: STORE - C[%d][%d] = %d (raw)", 
                              row_cnt, col_cnt, 
                              mac_accumulator);
@@ -299,10 +299,14 @@ module matmul_top (
                 AVERAGE_POOL: begin
                     if (pool_row_cnt < 2 && pool_col_cnt < 2) begin
                         pooled_buffer[pool_row_cnt][pool_col_cnt] <= 
-                            (result_buffer[pool_row_cnt*2][pool_col_cnt*2]    >> 2)+
-                            (result_buffer[pool_row_cnt*2][pool_col_cnt*2+1]  >> 2)+
-                            (result_buffer[pool_row_cnt*2+1][pool_col_cnt*2]  >> 2)+
-                            (result_buffer[pool_row_cnt*2+1][pool_col_cnt*2+1]>> 2);
+                            (((result_buffer[pool_row_cnt*2][pool_col_cnt*2]+
+                             result_buffer[pool_row_cnt*2][pool_col_cnt*2+1]+
+                             result_buffer[pool_row_cnt*2+1][pool_col_cnt*2]+
+                             result_buffer[pool_row_cnt*2+1][pool_col_cnt*2+1]) >> 2) > 255) ? 8'hFF :
+                            (result_buffer[pool_row_cnt*2][pool_col_cnt*2]+
+                             result_buffer[pool_row_cnt*2][pool_col_cnt*2+1]+
+                             result_buffer[pool_row_cnt*2+1][pool_col_cnt*2]+
+                             result_buffer[pool_row_cnt*2+1][pool_col_cnt*2+1]) >> 2;
                         
                         $display("MATMUL: POOL - P[%d][%d] = (%d+%d+%d+%d)/4 = %d+%d+%d+%d = %d",
                                     pool_row_cnt, pool_col_cnt,
@@ -310,18 +314,14 @@ module matmul_top (
                                     result_buffer[pool_row_cnt*2][pool_col_cnt*2+1],
                                     result_buffer[pool_row_cnt*2+1][pool_col_cnt*2],
                                     result_buffer[pool_row_cnt*2+1][pool_col_cnt*2+1],
-                                    // (result_buffer[pool_row_cnt*2][pool_col_cnt*2]    >> 2),
-                                    // (result_buffer[pool_row_cnt*2][pool_col_cnt*2+1]  >> 2),
-                                    // (result_buffer[pool_row_cnt*2+1][pool_col_cnt*2]  >> 2),
-                                    // (result_buffer[pool_row_cnt*2+1][pool_col_cnt*2+1]>> 2),
-                                    // (result_buffer[pool_row_cnt*2][pool_col_cnt*2]    >> 2) +
-                                    // (result_buffer[pool_row_cnt*2][pool_col_cnt*2+1]  >> 2)+
-                                    // (result_buffer[pool_row_cnt*2+1][pool_col_cnt*2]  >> 2) +
-                                    // (result_buffer[pool_row_cnt*2+1][pool_col_cnt*2+1]>> 2));
                                     (result_buffer[pool_row_cnt*2][pool_col_cnt*2]    >> 2),
                                     (result_buffer[pool_row_cnt*2][pool_col_cnt*2+1]  >> 2),
                                     (result_buffer[pool_row_cnt*2+1][pool_col_cnt*2]  >> 2),
                                     (result_buffer[pool_row_cnt*2+1][pool_col_cnt*2+1]>> 2),
+                                    // (result_buffer[pool_row_cnt*2][pool_col_cnt*2]    >> 2) +
+                                    // (result_buffer[pool_row_cnt*2][pool_col_cnt*2+1]  >> 2)+
+                                    // (result_buffer[pool_row_cnt*2+1][pool_col_cnt*2]  >> 2) +
+                                    // (result_buffer[pool_row_cnt*2+1][pool_col_cnt*2+1]>> 2));
                                     (result_buffer[pool_row_cnt*2][pool_col_cnt*2]  +
                                      result_buffer[pool_row_cnt*2][pool_col_cnt*2+1]+
                                      result_buffer[pool_row_cnt*2+1][pool_col_cnt*2] +
@@ -349,6 +349,7 @@ module matmul_top (
                 if (write_back_cnt) begin
                     // All data written
                     write_back_active <= 1'b0;
+                    
                     $display("MATMUL: Write back completed");
                 end else begin
                     write_back_cnt <= write_back_cnt + 1;

@@ -2,6 +2,14 @@
 
 module tb_matmul_top;
 
+    initial begin
+    $fsdbDumpfile("wave.fsdb");              // Specify FSDB waveform output file
+    $fsdbDumpvars(0, tb_matmul_top);         // Dump all hierarchy levels of testbench
+    $fsdbDumpvars("+mda");                   // Enable memory array dumping
+    $fsdbDumpvars("+all");                   // Dump all signals
+    $display("FSDB waveform dumping enabled - file: wave.fsdb");
+end
+
     // Clock and reset
     reg         clk;
     reg         rstn;

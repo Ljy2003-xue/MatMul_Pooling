@@ -4,17 +4,17 @@ module mem_top (
     
     // Port A - Matrix A interface
     input  wire        read_en_A,
-    input  wire [9:0]  addr_A,      // 扩展为10位地址
+    input  wire [9:0]  addr_A,      
     output reg  [31:0] data_out_A,
     
     // Port B - Matrix B interface  
     input  wire        read_en_B,
-    input  wire [9:0]  addr_B,      // 扩展为10位地址
+    input  wire [9:0]  addr_B,      
     output reg  [31:0] data_out_B,
     
     // Port C - Result write interface
     input  wire        write_en_C,
-    input  wire [9:0]  addr_C,      // 扩展为10位地址
+    input  wire [9:0]  addr_C,      
     input  wire [31:0] data_in_C
 );
 
