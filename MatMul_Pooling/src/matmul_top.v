@@ -72,7 +72,7 @@ module matmul_top (
     assign ready = ready_reg;
     assign mem_en_read_A = (current_state == READ_A);
     assign mem_en_read_B = (current_state == READ_B);
-    assign mem_write_en_C = write_back_active;
+    assign mem_en_write_C = write_back_active;
     
     // Address generation - use 10 bits to discribe address
     assign mem_addr_A = base_addr_A + {7'b0, row_cnt};           // Matrix A:0x00-0x03

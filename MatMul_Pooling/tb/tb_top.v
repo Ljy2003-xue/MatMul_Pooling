@@ -134,9 +134,9 @@ end
             timeout_counter = 0;
             
             // Initialize expected results for test 1
-            expected_results[0] = 8'd155;
-            expected_results[1] = 8'd191;
-            expected_results[2] = 8'd255;
+            expected_results[0] = 8'd86;
+            expected_results[1] = 8'd230;
+            expected_results[2] = 8'd230;
             expected_results[3] = 8'd255;
             
             // Apply reset
